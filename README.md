@@ -2,7 +2,7 @@
 
 ![](images/monitor.jpg)
 
-*By Robert Baumgartner, Red Hat Austria, March 2023 (OpenShift 4.12, OpenShift distributed tracing data collection 0.63)*
+*By Robert Baumgartner, Red Hat Austria, Janurary 2025 (OpenShift 4.17, OpenShift Logging 6.1)*
 
 In this blog, I will guide you on
 
