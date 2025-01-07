@@ -33,6 +33,7 @@ to build a new example application in Ruby. Or use kubectl to deploy a simple Ku
 
     kubectl create deployment hello-node --image=registry.k8s.io/e2e-test-images/agnhost:2.43 -- /agnhost serve-hostname
 ```
+
 ### Create MinIO Objects
 
 ```shell
@@ -60,19 +61,6 @@ oc apply -f minio/deployment-minio.yaml
 
 oc apply -f minio/route-minio.yaml
 ```
-
-```shell
-$ oc rsh deployments/minio-server mkdir /data/lokistack
-sh-5.1$ 
-
-mc alias set myminio http://localhost:9000 minio minio123
-Added `myminio` successfully.
-
-mc admin accesskey ls myminio
-User: minio
-  Access Keys:
-    loki, expires: never, sts: false
-    tempo, expires: never, sts: false
 
 ### Create a bucket for the lokistack
 
@@ -112,7 +100,34 @@ User: minio
 oc rsh deployments/minio-server \
        mc admin accesskey rm myminio loki              
 Successfully removed access key `loki`.
+
+# (optional) if you want displays information on a MinIO server
+oc rsh deployments/minio-server \
+       mc admin info myminio
+●  localhost:9000
+   Uptime: 1 week 
+   Version: 2024-12-18T13:15:44Z
+   Network: 1/1 OK 
+   Drives: 1/1 OK 
+   Pool: 1
+
+┌──────┬────────────────────────┬─────────────────────┬──────────────┐
+│ Pool │ Drives Usage           │ Erasure stripe size │ Erasure sets │
+│ 1st  │ 95.3% (total: 750 GiB) │ 1                   │ 1            │
+└──────┴────────────────────────┴─────────────────────┴──────────────┘
+
+16 GiB Used, 2 Buckets, 18,610 Objects
+1 drive online, 0 drives offline, EC:0       
 ```
+
+You can login to the MinIO console with minio/$MINIO_ADMIN_PWD
+
+```shell
+# get MinIO console URL
+$ oc get route minio-console -o jsonpath='{.spec.host}'
+minio-console-minio.apps.rbaumgar.demo.net
+```
+
 
 Keep in mind if you have networkpolicies in use, allow the project openshift-logging access to the project minio on port 9000.
 
@@ -253,6 +268,8 @@ Administrator - Observe - Logs
 Keep in mind that the Loki stack has a retention period!
 
 - Developer - Observe - Logs
+
+All messages in this namespace.
 
 ## Uninstall Logging Stack
 
