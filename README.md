@@ -1,4 +1,4 @@
-# OpenShift Lohhing QuickStart Guide with Loki
+# OpenShift Logging QuickStart Guide with Loki
 
 ![](images/monitor.jpg)
 
