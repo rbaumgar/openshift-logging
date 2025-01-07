@@ -1,0 +1,36 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  labels:
+    app.kubernetes.io/name: minio
+  name: minio-console
+  namespace: minio
+spec:
+  port:
+    targetPort: 44645
+  tls:
+    termination: edge
+  to:
+    kind: Service
+    name: minio
+    weight: 100
+  wildcardPolicy: None
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  labels:
+    app.kubernetes.io/name: minio
+  name: minio-server
+  namespace: minio
+spec:
+  port:
+    targetPort: 9000
+  tls:
+    termination: edge
+  to:
+    kind: Service
+    name: minio
+    weight: 100
+  wildcardPolicy: None
+
