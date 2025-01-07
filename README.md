@@ -33,7 +33,7 @@ to build a new example application in Ruby. Or use kubectl to deploy a simple Ku
 
     kubectl create deployment hello-node --image=registry.k8s.io/e2e-test-images/agnhost:2.43 -- /agnhost serve-hostname
 ```
-- create MinIO
+### Create MinIO Objects
 
 ```shell
 # create minio admin password
@@ -62,7 +62,7 @@ oc apply -f minio/route-minio.yaml
 ```
 
 ```shell
-$ oc rsh deployments/minio-server 
+$ oc rsh deployments/minio-server mkdir /data/lokistack
 sh-5.1$ 
 
 mc alias set myminio http://localhost:9000 minio minio123
@@ -74,31 +74,79 @@ User: minio
     loki, expires: never, sts: false
     tempo, expires: never, sts: false
 
-- create bucket lokistack
+### Create a bucket for the lokistack
 
-mkdir /data/<bucketname>
+For the lokistack a bucket has to be created on the MinIO server. This can be done very simple by creating a directory within the /data folder.
 
+```shell
+$ oc rsh deployments/minio-server mkdir /data/lokistack
+```
 
-- create accesskey
-mc admin accesskey create myminio/ --access-key myuser
-Access Key: myuser
-Secret Key: OoIvgnJfSQ5mHzy+xHUj+Hywic8z5glc+y6O1Y4F
+### Create an accesskey for the lokistack
+
+```shell
+# create loki user secret
+LOKI_USER_SECRET=`openssl rand -base64 12`
+
+# create an alias for the connection
+oc rsh deployments/minio-server \
+       mc alias set myminio http://localhost:9000 minio $MINIO_ADMIN_PWD
+Added `myminio` successfully.
+
+oc rsh deployments/minio-server \
+       mc admin accesskey create myminio/ --access-key loki --secret-key $LOKI_USER_SECRET
+Access Key: loki
+Secret Key: ...
 Expiration: NONE
 Name: 
 Description: 
 
-mc admin accesskey rm myminio myuser              
-Successfully removed access key `myuser`.
+# (optional) if you want to list all available accesskeys
+oc rsh deployments/minio-server \
+       mc admin accesskey ls myminio               
+User: minio
+  Access Keys:
+    loki, expires: never, sts: false
+
+# (optional) if you want to delete an accesskey
+oc rsh deployments/minio-server \
+       mc admin accesskey rm myminio loki              
+Successfully removed access key `loki`.
+```
+
+Keep in mind if you have networkpolicies in use, allow the project openshift-logging access to the project minio on port 9000.
 
 ## Install Loki Operator
+
+Loki Operator supports AWS S3, Azure, GCS, Minio, OpenShift Data Foundation and Swift for LokiStack object storage.
+
+If you are using a different object store you might need to define the secret in a different way.
+See https://github.com/grafana/loki/blob/main/operator/docs/lokistack/object_storage.md
 
 ```sh
 kubectl create secret generic lokistack-minio -n openshift-logging\
   --from-literal=bucketnames="lokistack" \
   --from-literal=endpoint="http://minio.minio.svc:9000" \
   --from-literal=access_key_id="loki" \
-  --from-literal=access_key_secret="lokipass123"
+  --from-literal=access_key_secret="$LOKI_USER_SECRET"
+```
 
+The endpoint consists= <svc>.<project>.svc:9000.
+
+Loki supports different preconfigured sizes.
+
+The 1x.demo configuration defines a single Loki deployment with minimal resource and limit requirements, no high availability (HA) support for all Loki components. This configuration is suited for demo environmnt.
+
+The 1x.pico configuration defines a single Loki deployment with minimal resource and limit requirements, offering high availability (HA) support for all Loki components. This configuration is suited for deployments that do not require a single replication factor or auto-compaction.
+
+Other available sizes are 1x.extra-small, 1x.small, 1x.medium.
+See https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html-single/logging/index#log6x-loki-sizing_log6x-loki-6.1
+
+In the operators/loki/lokistack.yaml the spec.size is defined as 1x.demo. 
+
+To save space on the lokistack retention period is set to 3 days. Maximum supported retention period is 30 days.
+
+```sh
 oc apply -f operators/loki/operator-loki.yaml
 
 oc apply -f operators/loki/lokistack.yaml
@@ -120,6 +168,8 @@ logging-loki-ingester-0                        1/1     Running   0          3d20
 logging-loki-querier-55d7fbb758-222dw          1/1     Running   0          3d20h
 logging-loki-query-frontend-754c4594c5-rmgww   1/1     Running   0          3d20h
 ```
+
+When you select another size than 1x.demo multiple pods for the lokistack will be created.
 
 ## Install OpenShift Logging Operator
 
@@ -190,7 +240,19 @@ oc apply -f operators/coo/uiplugin-logging.yaml
 
 ## View Logs as Admin
 
+Administrator - Observe - Logs
+
+- application
+- infrastructure
+- audit
+
 ## View Logs as User
+
+- Administrator - Workloads/Pods -> select Pod - Aggregated Logs
+
+Keep in mind that the Loki stack has a retention period!
+
+- Developer - Observe - Logs
 
 ## Uninstall Logging Stack
 
@@ -208,4 +270,4 @@ logging-loki-querier          1               N/A               0               
 logging-loki-query-frontend   1               N/A               0                     4d17h
 ```
 
-see Not able to drain a node when running LokiStack with size 1x.demo in RHOCP 4, https://access.redhat.com/solutions/7058851
+see **Not able to drain a node when running LokiStack with size 1x.demo in RHOCP 4**, https://access.redhat.com/solutions/7058851
