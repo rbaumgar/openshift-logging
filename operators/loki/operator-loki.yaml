@@ -8,9 +8,7 @@ kind: OperatorGroup
 metadata:
   generateName: openshift-operators-redhat-
   namespace: openshift-operators-redhat
-spec:
-  targetNamespaces:
-  - openshift-operators-redhat
+spec: {}
 ---
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
