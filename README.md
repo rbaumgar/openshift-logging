@@ -1,6 +1,6 @@
 # OpenShift Logging QuickStart Guide with Loki
 
-![](images/monitor.jpg)
+![](images/logging.jpg)
 
 *By Robert Baumgartner, Red Hat Austria, Janurary 2025 (OpenShift 4.17, OpenShift Logging 6.1)*
 
@@ -124,17 +124,17 @@ $ oc rsh deployments/minio-server \
 
 # create user
 $ oc rsh deployments/minio-server \
-         mc admin user add myminio openshift-logging $LOKI_USER_SECRET
-Added user `openshft-logging` successfully.
+         mc admin user add myminio loki-user $LOKI_USER_SECRET
+Added user `loki-user` successfully.
 
 # (optional) list all users
 $ oc rsh deployments/minio-server \
          mc admin user ls myminio
-enabled    openshift-logging
+enabled    loki-user
 
 # attach openshift-logging-acccess-policy to user openshift-logging
 $ oc rsh deployments/minio-server \
-         mc admin policy attach myminio openshift-logging-access-policy --user openshift-logging
+         mc admin policy attach myminio openshift-logging-access-policy --user loki-user
 Attached Policies: [openshift-logging-access-policy]
 To User: openshift-logging
 
@@ -227,7 +227,7 @@ See https://github.com/grafana/loki/blob/main/operator/docs/lokistack/object_sto
 $ kubectl create secret generic lokistack-minio -n openshift-logging\
           --from-literal=bucketnames="openshift-logging" \
           --from-literal=endpoint="http://minio.minio.svc:9000" \
-          --from-literal=access_key_id="openshift-logging" \
+          --from-literal=access_key_id="loki-user" \
           --from-literal=access_key_secret="$LOKI_USER_SECRET"
 secret/lokistack-minio created
 ```
@@ -306,6 +306,15 @@ All components ready
 
 If you select another size than 1x.demo multiple pods for the lokistack will be created.
 
+*LokiStack Components*
+- Gateway: The gateway receives requests and redirects them to the appropriate container based on the request’s URL.
+- Distributor: The distributor service is responsible for handling incoming streams by clients.
+Ingester: The ingester service is responsible for writing log data to long-term storage backends (DynamoDB, S3, Cassandra, etc.) on the write path and returning log data for in-memory queries on the read path.
+- Query Frontend:  internally performs some query adjustments and holds queries in an internal queue.
+- Querier: handles queries using the LogQL query language, fetching logs both from the ingesters and from long-term storage.
+- Compactor: a specific service that reduces the index size by deduping the index and merging all the files to a single file per table.
+- Index Gateway: downloads and synchronizes the index from the Object Storage in order to serve index queries to the Queriers and Rulers over gRPC.
+
 ## Configure the ClusterLogForwarder to the Lokistack
 
 ```sh
@@ -333,6 +342,8 @@ clusterrole.rbac.authorization.k8s.io/collect-infrastructure-logs added: "collec
 $ oc apply -f operators/logging/clusterlogforwarder.yaml
 clusterlogforwarder.observability.openshift.io/collector created
 ```
+
+You only need to apply the required roles for the your required log types (application, audit and infrastracture).
 
 ```sh
 $ oc get clusterlogforwarders.observability.openshift.io collector --template='{{printf "%-55s %7s %-30s\n" "Type" "Status" "Reason/Message"}}{{range .status.conditions}}{{printf "%-55s %7s %s/%s\n" .type .status .reason .message}}{{end}}'
@@ -377,17 +388,19 @@ In this example six collectors are running becuase one on each node. 3 control p
 
 ## Install Cluster Observability Operator
 
+The Cluster Observability Operator is required for the UI in the OpenShift console to display the log content.
+
 ```sh
 $ oc apply -f operators/coo/uiplugin-logging.yaml
 uiplugin.observability.openshift.io/logging created
 ```
 
-Go to the OpenShift console and the "refresh web console" pops up. Then the UIPlugin is available.
+Go to the OpenShift console and wait until the "refresh web console" pops up. Then the UIPlugin is available.
 
 ![](/images/refresh_webconsole.png)
 
 
-## View Logs as Admin
+## View Logs as Cluster Admin 
 
 Administrator - Observe - Logs
 
@@ -461,6 +474,25 @@ $ oc delete clusterrolebinding event-reader-binding
 clusterrolebinding.rbac.authorization.k8s.io "event-reader-binding" deleted
 $ oc delete clusterrole event-reader 
 clusterrole.rbac.authorization.k8s.io "event-reader" deleted
+```
+
+Go to Grafan route and login
+!!!
+
+![Grafana Dashboard](images/grafana_dashboard.png)
+
+## Access the Loki data with the Grafana dashboard
+
+The preferred option for accessing the data stored in Loki managed by loki-operator when running on OpenShift with the default OpenShift tenancy model is to go through the LokiStack gateway and do proper authentication against the authentication service included in OpenShift.
+
+The configuration uses oauth-proxy to authenticate the user to the Grafana instance and forwards the token through Grafana to LokiStack’s gateway service. This enables the configuration to fully take advantage of the tenancy model, so that users can only see the logs of their applications and only admins can view infrastructure and audit logs.
+
+As the open-source version of Grafana does not support to limit datasources to certain groups of users, all datasources (“application”, “infrastructure”, “audit” and “network”) will be visible to all users. The infrastructure and audit datasources will not yield any data for non-admin users.
+
+Keep in mind that the configuration points to the Loki Gateway server (GATEWAY_ADDRESS). This contains the Lokistack name (logging-loki). If you have changed, replace it with the correct name.
+
+```sh
+$ oc apply grafana/grafana_gateway_ocp_oauth.yaml
 ```
 
 ## Uninstall Logging Stack
