@@ -6,7 +6,7 @@
 
 In this blog, I will guide you on
 
-- How to install Loki as storage for OpenShift Logging using MinIO as object store
+- How to install Loki as storage for OpenShift Logging using MinIO as an object store
 
 - How to install OpenShift Logging using the Loki stack
 
@@ -14,14 +14,14 @@ In this blog, I will guide you on
 
 OpenShift Logging is a powerful and flexible logging solution for OpenShift, built on top of the Vector and Loki project. It provides a unified approach to collecting, aggregating, and analyzing logs from various sources within an OpenShift cluster, such as container images, cluster nodes, and the Kubernetes API server.
 
-In previous version OpenShift Logging was based on Elastic, Fluentd and Kibana project.
+OpenShift Logging was based on the Elastic, Fluentd, and Kibana project in the previous version.
 
-You need to be cluster admin to follow this guide.
+You need to be a cluster admin to follow this guide.
 
 This document is based on OpenShift 4.17. See [Configuring and using logging in OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/logging/index).
 
 ## Install MinIO (optional)
-Loki requires an object storage. So if you have already an object storage available you can skip this chapter.
+Loki requires an object store. So if you already have an object store available you can skip this chapter.
 
 ### Create a New MinIO Project
 
@@ -83,7 +83,7 @@ WebUI: http://10.128.4.14:44645 http://127.0.0.1:44645
 Docs: https://docs.min.io
 ```
 
-### Create a bucket and user for the lokistack
+### Create a bucket and user for the Lokistack
 
 ```shell
 # create loki user secret
@@ -166,7 +166,7 @@ $ oc rsh deployments/minio-server \
 Removed `myminio` successfully.
 ```
 
-You can login to the MinIO console with minio/$MINIO_ADMIN_PWD
+You can log in to the MinIO console with minio/$MINIO_ADMIN_PWD
 
 ```shell
 # get MinIO console URL
@@ -174,10 +174,10 @@ $ oc get route minio-console -o jsonpath='{.spec.host}'
 minio-console-minio.apps.rbaumgar.demo.net
 ```
 
-When you use the MinIO server as a general purpose object storage (s3) you should keep in mind, that you assign to the other users similar policies (openshift-logging-access-policy).
-If you are using the default polcies (readonly, readwrite and writeonly) those users are able to access all buckets on the server.
+When you use the MinIO server as a general-purpose object storage (s3) you should keep in mind, that you assign to other users similar policies (openshift-logging-access-policy).
+If you are using the default policies (readonly, readwrite and writeonly) those users can access all buckets on the server.
 
-The configuration of the MinIO server is not HA. Their is also an MinIO operator available.
+The configuration of the MinIO server is not HA. There is also a MinIO operator available.
 
 Keep in mind if you have networkpolicies in use, allow the project openshift-logging access to the project minio on port 9000.
 
@@ -222,9 +222,9 @@ cluster-observability-operator.0.4.1   Cluster Observability Operator   0.4.1   
 
 ## Configure the LokiStack 
 
-Loki Operator supports AWS S3, Azure, GCS, MinIO, OpenShift Data Foundation and Swift for the LokiStack object storage.
+Loki Operator supports AWS S3, Azure, GCS, MinIO, OpenShift Data Foundation, and Swift for the LokiStack object storage.
 
-If you are using a different object store you might need to define the secret in a different way.
+If you are using a different object store you might need to define the secret differently.
 See https://github.com/grafana/loki/blob/main/operator/docs/lokistack/object_storage.md
 
 ```sh
@@ -240,16 +240,16 @@ The endpoint consists= <svc>.<project>.svc:9000.
 
 Loki supports different preconfigured sizes.
 
-The 1x.demo configuration defines a single Loki deployment with minimal resource and limit requirements, no high availability (HA) support for all Loki components. This configuration is suited for demo environmnt.
+The `1x.demo` configuration defines a single Loki deployment with minimal resource and limit requirements, and no high availability (HA) support for all Loki components. This configuration is suited for a demo environment.
 
-The 1x.pico configuration defines a single Loki deployment with minimal resource and limit requirements, offering high availability (HA) support for all Loki components. This configuration is suited for deployments that do not require a single replication factor or auto-compaction.
+The `1x.pico` configuration defines a single Loki deployment with minimal resource and limit requirements, offering high availability (HA) support for all Loki components. This configuration is suited for deployments that do not require a single replication factor or auto-compaction.
 
-Other available sizes are 1x.extra-small, 1x.small, 1x.medium.
+Other available sizes are `1x.extra-small`, `1x.small`, and `1x.medium`.
 See https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html-single/logging/index#log6x-loki-sizing_log6x-loki-6.1
 
-In the operators/loki/lokistack.yaml the spec.size is defined as 1x.demo. 
+In the operators/loki/lokistack.yaml the spec.size is defined as `1x.demo`. 
 
-To save space on the lokistack retention period is set to 3 days. Maximum supported retention period is 30 days.
+To save space the Lokistack retention period is set to 3 days. The maximum supported retention period is 30 days.
 
 ```sh
 $ oc project openshift-logging
@@ -289,7 +289,7 @@ EOF
 lokistack.loki.grafana.com/logging-loki created
 ```
 
-Wait that all pods are running and the status of the CRD goes to ready.
+Wait until all pods are running and the status of the CRD goes to ready.
 
 ```sh
 $ oc get pod -l app.kubernetes.io/instance=logging-loki
@@ -308,7 +308,7 @@ Status
 All components ready
 ```
 
-If you select another size than 1x.demo multiple pods for the lokistack will be created.
+If you select another size than 1x.demo multiple pods for the Lokistack will be created.
 
 *LokiStack Components*
 - Gateway: The gateway receives requests and redirects them to the appropriate container based on the request’s URL.
@@ -347,7 +347,7 @@ $ oc apply -f operators/logging/clusterlogforwarder.yaml
 clusterlogforwarder.observability.openshift.io/collector created
 ```
 
-You only need to apply the required roles for the your required log types (application, audit and infrastracture).
+You only need to apply the required roles for your required log types (application, audit, and infrastructure).
 
 ```sh
 $ oc get clusterlogforwarders.observability.openshift.io collector --template='{{printf "%-55s %7s %-30s\n" "Type" "Status" "Reason/Message"}}{{range .status.conditions}}{{printf "%-55s %7s %s/%s\n" .type .status .reason .message}}{{end}}'
@@ -388,7 +388,7 @@ collector-s858j   1/1     Running   0          3d19h
 collector-scv4z   1/1     Running   0          3d19h
 ```
 
-In this example six collectors are running becuase one on each node. 3 control plain nodes and 3 worker nodes.
+In this example, six collectors are running because one is on each node. 3 control plain nodes and 3 worker nodes.
 
 ## Install Cluster Observability Operator
 
@@ -409,17 +409,17 @@ Go to the OpenShift console and wait until the "refresh web console" pops up. Th
 As a user with admin rights you will find the logs under the `Administrator` menu and select `Observe / Logs`.
 
 In the top row a selection for the
-- content (search for a string withing the log message)
+- content (search for a string within the log message)
 - namespace
 - pod
 - container
-- severity (critical, error, warning, debug, info, trace and unkonown)
-- log type (application, infrastructure and audit)
+- severity (critical, error, warning, debug, info, trace, and unknown)
+- log type (application, infrastructure ,and audit)
 
-On the top right is a select of the time range and the refresh interval.
+On the top right is a selection of the time range and the refresh interval.
 
 - Application logs:
-Container logs generated by user applications running in the cluster, except infrastructure container applications.
+Container logs are generated by user applications running in the cluster, except infrastructure container applications.
 
 ![](images/observe-log-application.png)
 
@@ -429,11 +429,11 @@ Container logs generated by infrastructure namespaces: openshift*, kube*, or def
 ![](images/observe-log-infrastructure.png)
 
 - Audit logs:
-Logs generated by auditd, the node audit system, which are stored in the /var/log/audit/audit.log file, and logs from the auditd, kube-apiserver, openshift-apiserver services, as well as the ovn project if enabled.
+Logs generated by auditd, the node audit system, which is stored in the /var/log/audit/audit.log file, and logs from the auditd, kube-apiserver, openshift-apiserver services, as well as the ovn project if enabled.
 
 ![](images/observe-log-audit.png)
 
-With the *Show Query* button you are able to crate your own query.
+With the *Show Query* button you can create your query.
 
 Some examples:
 
@@ -443,7 +443,7 @@ Some examples:
 
 ## View Logs as User
 
-As a user without admin rights you will find the logs under the `Administrator` menu and select `Workloads / Pods`. When the pod is selected their is a tab `Aggregated Logs`
+As a user without admin rights, you will find the logs under the `Administrator` menu and select `Workloads / Pods`. When the pod is selected there is a tab `Aggregated Logs`
 
 ![](images/workload-pod-log.png)
 
@@ -488,7 +488,7 @@ $ oc logs deploy/eventrouter -n openshift-logging
 
 ### View the collected events in the console
 
-Got to the Adminsitrator view and select `infrastructure` and the pod `eventrouter-xxxx`.
+Got to the Administrator view and select `infrastructure` and the pod `eventrouter-xxxx`.
 
 ### Uninstall the Event Router
 
@@ -527,7 +527,7 @@ deployment.apps/grafana created
 route.route.openshift.io/grafana created
 ```
 
-Go to Grafana route and login with an OpenShift user.
+Go to the Grafana route and login with an OpenShift user.
 
 ```shell
 # get Grafana URL
