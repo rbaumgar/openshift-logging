@@ -437,9 +437,35 @@ With the *Show Query* button you can create your query.
 
 Some examples:
 
-- { log_type="infrastructure", kubernetes_namespace_name="openshift-logging" } |= \`grafana\` | json: all log entries from the namespace `openshift-loggin` with the content `grafana`
+```
+{ log_type="infrastructure", kubernetes_namespace_name="openshift-logging" } |= `grafana` | json
+```
+all log entries from the namespace `openshift-logging` with the content `grafana`
 
-- { log_type="infrastructure"} |= \`Started crio\` | json | log_source="node" | hostname="master-0": all log entries from the node log from the hostname `master-0` with the content `Started crio`
+```
+{ log_type="infrastructure"} |= \`Started crio\` | json | log_source="node" | hostname="master-0"
+```
+all log entries from the node log from the hostname `master-0` with the content `Started crio`
+
+```
+{ log_type="audit" } | json | objectRef_resource ="virtualmachines", verb != "get", verb != "watch", verb != "patch", verb != "list", user_username !~ "system:serviceaccount:.*" | line_format `{{ if eq .verb "create" }} create {{ else if eq .verb "delete" }} delete {{else}} {{ .objectRef_subresource }} {{end}} {{ .objectRef_name }} ({{ .objectRef_namespace  }}) by {{ .user_username  }}`
+```
+create a report who started, stopped or changed a Virtualmachin
+![](images/VM_startstop.png)
+
+
+Following labels are available at application and infrastructure log:
+- kubernetes_container_name
+- kubernetes_host
+- kubernetes_namespace_name
+- kubernetes_pod_name
+- log_type
+
+Following labels are available at audit log
+- kubernetes_host
+- log_type
+
+You will find more details about Loki LoqQL [ Grafana Loki -> Query -> Log queries](https://grafana.com/docs/loki/latest/query/log_queries/)
 
 ## View Logs as User
 
