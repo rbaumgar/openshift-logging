@@ -448,6 +448,11 @@ all log entries from the namespace `openshift-logging` with the content `grafana
 all log entries from the node log from the hostname `master-0` with the content `Started crio`
 
 ```
+{kubernetes_namespace_name="demo"} | json | line_format `{{.kubernetes_pod_name}} {{.message}}`
+```
+all log entries from namespace `demo` with pod name and message
+
+```
 { log_type="audit" } | json | objectRef_resource ="virtualmachines", verb != "get", verb != "watch", verb != "patch", verb != "list", user_username !~ "system:serviceaccount:.*" | line_format `{{ if eq .verb "create" }} create {{ else if eq .verb "delete" }} delete {{else}} {{ .objectRef_subresource }} {{end}} {{ .objectRef_name }} ({{ .objectRef_namespace  }}) by {{ .user_username  }}`
 ```
 create a report who started, stopped or changed a Virtualmachin
