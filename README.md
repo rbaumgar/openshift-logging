@@ -14,14 +14,14 @@ In this blog, I will guide you on
 
 OpenShift Logging is a powerful and flexible logging solution for OpenShift, built on top of the Vector and Loki project. It provides a unified approach to collecting, aggregating, and analyzing logs from various sources within an OpenShift cluster, such as container images, cluster nodes, and the Kubernetes API server.
 
-OpenShift Logging was based on the Elastic, Fluentd, and Kibana project in the previous version.
+OpenShift Logging was previously based on the Elastic, Fluentd, and Kibana projects.
 
 You need to be a cluster admin to follow this guide.
 
 This document is based on OpenShift 4.17. See [Configuring and using logging in OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/logging/index).
 
 ## Install MinIO (optional)
-Loki requires an object store. So if you already have an object store available you can skip this chapter.
+Loki requires an object store. So, if you already have an object store, you can skip this chapter.
 
 ### Create a New MinIO Project
 
@@ -174,12 +174,12 @@ $ oc get route minio-console -o jsonpath='{.spec.host}'
 minio-console-minio.apps.rbaumgar.demo.net
 ```
 
-When you use the MinIO server as a general-purpose object storage (s3) you should keep in mind, that you assign to other users similar policies (openshift-logging-access-policy).
-If you are using the default policies (readonly, readwrite and writeonly) those users can access all buckets on the server.
+When you use the MinIO server as a general-purpose object storage (s3), you should remember that you assign similar policies to other users (openshift-logging-access-policy).
+If you are using the default policies (readonly, readwrite, and writeonly) those users can access all buckets on the server.
 
 The configuration of the MinIO server is not HA. There is also a MinIO operator available.
 
-Keep in mind if you have networkpolicies in use, allow the project openshift-logging access to the project minio on port 9000.
+If you have networkpolicies in use, allow the project openshift-logging access to the project minio on port 9000.
 
 ## Install Operators: OpenShift Logging, Loki, Observability Operator
 
@@ -204,7 +204,7 @@ $ oc create -f operators/coo/operator-coo.yaml
 subscription.operators.coreos.com/cluster-observability-operator created
 ```
 
-Check that all operators are running and phase is *Succeeded*. This may take some minutes.
+Check that all operators are running and the phase is *Succeeded*. This may take some minutes.
 
 ```sh
 $ oc get csv -n openshift-logging cluster-logging.v6.1.0
@@ -240,9 +240,9 @@ The endpoint consists= <svc>.<project>.svc:9000.
 
 Loki supports different preconfigured sizes.
 
-The `1x.demo` configuration defines a single Loki deployment with minimal resource and limit requirements, and no high availability (HA) support for all Loki components. This configuration is suited for a demo environment.
+The `1x.demo` configuration defines a single Loki deployment with minimal resource and limit requirements and no high availability (HA) support for all Loki components. This configuration is suited for a demo environment.
 
-The `1x.pico` configuration defines a single Loki deployment with minimal resource and limit requirements, offering high availability (HA) support for all Loki components. This configuration is suited for deployments that do not require a single replication factor or auto-compaction.
+The `1x.pico` configuration defines a single Loki deployment with minimal resource and limit requirements. It offers high availability (HA) support for all Loki components. This configuration is suited for deployments that do not require a single replication factor or auto-compaction.
 
 Other available sizes are `1x.extra-small`, `1x.small`, and `1x.medium`.
 See https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html-single/logging/index#log6x-loki-sizing_log6x-loki-6.1
@@ -317,7 +317,7 @@ Ingester: The ingester service is responsible for writing log data to long-term 
 - Query Frontend:  internally performs some query adjustments and holds queries in an internal queue.
 - Querier: handles queries using the LogQL query language, fetching logs both from the ingesters and from long-term storage.
 - Compactor: a specific service that reduces the index size by deduping the index and merging all the files to a single file per table.
-- Index Gateway: downloads and synchronizes the index from the Object Storage in order to serve index queries to the Queriers and Rulers over gRPC.
+- Index Gateway: downloads and synchronizes the index from the Object Storage to serve index queries to the Queriers and Rulers over gRPC.
 
 ## Configure the ClusterLogForwarder to the Lokistack
 
@@ -388,7 +388,7 @@ collector-s858j   1/1     Running   0          3d19h
 collector-scv4z   1/1     Running   0          3d19h
 ```
 
-In this example, six collectors are running because one is on each node. 3 control plain nodes and 3 worker nodes.
+Six collectors are running because one is on each node, 3 control plane nodes, and 3 worker nodes.
 
 ## Install Cluster Observability Operator
 
@@ -399,14 +399,14 @@ $ oc apply -f operators/coo/uiplugin-logging.yaml
 uiplugin.observability.openshift.io/logging created
 ```
 
-Go to the OpenShift console and wait until the "refresh web console" pops up. Then the UIPlugin is available.
+Go to the OpenShift console and wait until the "refresh web console" option appears. Then, the UIPlugin will be available.
 
 ![](/images/refresh_webconsole.png)
 
 
 ## View Logs as Cluster Admin 
 
-As a user with admin rights you will find the logs under the `Administrator` menu and select `Observe / Logs`.
+As a user with admin rights, you will find the logs under the `Administrator` menu and select `Observe / Logs`.
 
 In the top row a selection for the
 - content (search for a string within the log message)
@@ -414,7 +414,7 @@ In the top row a selection for the
 - pod
 - container
 - severity (critical, error, warning, debug, info, trace, and unknown)
-- log type (application, infrastructure ,and audit)
+- log type (application, infrastructure, and audit)
 
 On the top right is a selection of the time range and the refresh interval.
 
@@ -455,18 +455,18 @@ all log entries from namespace `demo` with pod name and message
 ```
 { log_type="audit" } | json | objectRef_resource ="virtualmachines", verb != "get", verb != "watch", verb != "patch", verb != "list", user_username !~ "system:serviceaccount:.*" | line_format `{{ if eq .verb "create" }} create {{ else if eq .verb "delete" }} delete {{else}} {{ .objectRef_subresource }} {{end}} {{ .objectRef_name }} ({{ .objectRef_namespace  }}) by {{ .user_username  }}`
 ```
-create a report who started, stopped or changed a Virtualmachin
+create a report on who started, stopped, or changed a Virtualmachine
 ![](images/VM_startstop.png)
 
 
-Following labels are available at application and infrastructure log:
+The following labels are available in the application and infrastructure log:
 - kubernetes_container_name
 - kubernetes_host
 - kubernetes_namespace_name
 - kubernetes_pod_name
 - log_type
 
-Following labels are available at audit log
+The following labels are available in the audit log:
 - kubernetes_host
 - log_type
 
@@ -488,7 +488,7 @@ All messages in this namespace are displayed.
 
 If you want to persist the events of the OpenShift platform you can use the Event Router.
 
-The OpenShift Container Platform Event Router is a pod that watches Kubernetes events and logs them for collection by the logging. You must manually deploy the Event Router.
+The OpenShift Container Platform Event Router is a pod that watches Kubernetes events and logs them for collection by the logging. You have to deploy the Event Router manually.
 
 The Event Router collects events from all projects and writes them to STDOUT. The collector then forwards those events to the store defined in the ClusterLogForwarder custom resource (CR).
 
@@ -539,9 +539,9 @@ clusterrole.rbac.authorization.k8s.io "event-reader" deleted
 
 The preferred option for accessing the data stored in Loki managed by loki-operator when running on OpenShift with the default OpenShift tenancy model is to go through the LokiStack gateway and do proper authentication against the authentication service included in OpenShift.
 
-The configuration uses oauth-proxy to authenticate the user to the Grafana instance and forwards the token through Grafana to LokiStack’s gateway service. This enables the configuration to fully take advantage of the tenancy model, so that users can only see the logs of their applications and only admins can view infrastructure and audit logs.
+The configuration uses oauth-proxy to authenticate the user to the Grafana instance and forwards the token through Grafana to LokiStack’s gateway service. This enables the configuration to fully take advantage of the tenancy model so that users can only see the logs of their applications and only admins can view infrastructure and audit logs.
 
-As the open-source version of Grafana does not support to limit datasources to certain groups of users, all datasources (“application”, “infrastructure” and “audit”) will be visible to all users. The infrastructure and audit datasources will not yield any data for non-admin users.
+As the open-source version of Grafana does not support limiting datasources to certain groups of users, all datasources (“application”, “infrastructure” and “audit”) will be visible to all users. The infrastructure and audit datasources will not yield any data for non-admin users.
 
 Keep in mind that the configuration points to the Loki Gateway server (GATEWAY_ADDRESS). This contains the Lokistack name (logging-loki). If you have changed, replace it with the correct name.
 
