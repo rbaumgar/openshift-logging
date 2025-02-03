@@ -20,167 +20,6 @@ You need to be a cluster admin to follow this guide.
 
 This document is based on OpenShift 4.17. See [Configuring and using logging in OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/logging/index).
 
-## Install MinIO (optional)
-Loki requires an object store. So, if you already have an object store, you can skip this chapter.
-
-### Create a New MinIO Project
-
-Create a new project (for example minio) :
-
-```shell
-$ oc new-project minio
-```
-
-### Create the MinIO Objects
-
-```shell
-# create minio admin password
-MINIO_ADMIN_PWD=`openssl rand -base64 12`
-# cat minio/secret-minio.yaml
-cat <<EOF | oc apply -f -
-apiVersion: v1
-kind: Secret
-type: Opaque
-metadata:
-  annotations: {}
-  name: minio-access-secrets
-stringData:
-  minioSecret: $MINIO_ADMIN_PWD
-  minioAccessKey: minio
-  minioConsoleAddress: ":44645"
-EOF
-secret/minio-access-secrets created
-
-$ oc apply -f minio/pvc-minio.yaml
-persistentvolumeclaim/minio-home-claim created
-persistentvolumeclaim/minio-config-claim created
-
-$ oc apply -f minio/svc-minio.yaml
-service/minio created
-
-$ oc apply -f minio/deployment-minio.yaml
-deployment.apps/minio-server created
-
-$ oc apply -f minio/route-minio.yaml
-route.route.openshift.io/minio-console created
-route.route.openshift.io/minio-server created
-
-$ oc get pod -n minio
-NAME                           READY   STATUS    RESTARTS   AGE
-minio-server-cf8c6c9c4-cvwwv   1/1     Running   0          3d2h
-
-$ oc logs deployments/minio-server -n minio
-INFO: WARNING: MINIO_ACCESS_KEY and MINIO_SECRET_KEY are deprecated.
-         Please use MINIO_ROOT_USER and MINIO_ROOT_PASSWORD
-MinIO Object Storage Server
-Copyright: 2015-2025 MinIO, Inc.
-License: GNU AGPLv3 - https://www.gnu.org/licenses/agpl-3.0.html
-Version: RELEASE.2024-12-18T13-15-44Z (go1.23.4 linux/amd64)
-
-API: http://10.128.4.14:9000  http://127.0.0.1:9000 
-WebUI: http://10.128.4.14:44645 http://127.0.0.1:44645   
-
-Docs: https://docs.min.io
-```
-
-### Create a bucket and user for the Lokistack
-
-```shell
-# create loki user secret
-LOKI_USER_SECRET=`openssl rand -base64 12`
-
-# create an alias for the connection
-$ oc rsh deployments/minio-server \
-         mc alias set myminio http://localhost:9000 minio $MINIO_ADMIN_PWD
-Added `myminio` successfully.
-
-# copy policy file to pod
-$ cat minio/openshift-logging-access-policy.json | \
-  oc exec deployments/minio-server -i -- sh -c "cat /dev/stdin > /tmp/openshift-logging-access-policy.json"
-
-# create new policy
-$ oc rsh deployments/minio-server \
-         mc admin policy create myminio openshift-logging-access-policy /tmp/openshift-logging-access-policy.json
-Created policy `openshift-logging-access-policy` successfully.
-
-# cleanup: remove policy file
-$ oc rsh deployments/minio-server rm /tmp/openshift-logging-access-policy.json
-
-# (optional) create list all policies
-$ oc rsh deployments/minio-server \
-         mc admin policy ls myminio
-readonly
-readwrite
-writeonly
-consoleAdmin
-diagnostics
-openshift-logging-access-policy
-
-# create openshift-logging bucket
-$ oc rsh deployments/minio-server \
-         mc mb myminio/openshift-logging
-Bucket created successfully `myminio/openshift-logging`.
-
-# (optional) list all buckets
-$ oc rsh deployments/minio-server \
-         mc ls myminio
-[2025-01-09 11:28:51 UTC]     0B openshift-logging/
-
-# create user
-$ oc rsh deployments/minio-server \
-         mc admin user add myminio loki-user $LOKI_USER_SECRET
-Added user `loki-user` successfully.
-
-# (optional) list all users
-$ oc rsh deployments/minio-server \
-         mc admin user ls myminio
-enabled    loki-user
-
-# attach openshift-logging-acccess-policy to user openshift-logging
-$ oc rsh deployments/minio-server \
-         mc admin policy attach myminio openshift-logging-access-policy --user loki-user
-Attached Policies: [openshift-logging-access-policy]
-To User: openshift-logging
-
-# (optional) if you want displays information on a MinIO server
-$ oc rsh deployments/minio-server \
-         mc admin info myminio
-●  localhost:9000
-   Uptime: 1 week 
-   Version: 2024-12-18T13:15:44Z
-   Network: 1/1 OK 
-   Drives: 1/1 OK 
-   Pool: 1
-
-┌──────┬────────────────────────┬─────────────────────┬──────────────┐
-│ Pool │ Drives Usage           │ Erasure stripe size │ Erasure sets │
-│ 1st  │ 95.3% (total: 750 GiB) │ 1                   │ 1            │
-└──────┴────────────────────────┴─────────────────────┴──────────────┘
-
-16 GiB Used, 2 Buckets, 18,610 Objects
-1 drive online, 0 drives offline, EC:0 
-
-# cleanup: remove the alias for the connection
-$ oc rsh deployments/minio-server \
-         mc alias remove myminio
-Removed `myminio` successfully.
-```
-
-You can log in to the MinIO console with minio/$MINIO_ADMIN_PWD
-
-```shell
-# get MinIO console URL
-$ oc get route minio-console -o jsonpath='{.spec.host}'
-minio-console-minio.apps.rbaumgar.demo.net
-```
-
-When you use the MinIO server as a general-purpose object storage (s3), you should remember that you assign similar policies to other users (openshift-logging-access-policy).
-If you are using the default policies (readonly, readwrite, and writeonly) those users can access all buckets on the server.
-
-The configuration of the MinIO server is not HA. There is also a MinIO operator available.
-
-If you have networkpolicies in use, allow the project openshift-logging access to the project minio on port 9000.
-
 ## Install Operators: OpenShift Logging, Loki, Observability Operator
 
 Install the required operators
@@ -224,19 +63,20 @@ cluster-observability-operator.0.4.1   Cluster Observability Operator   0.4.1   
 
 Loki Operator supports AWS S3, Azure, GCS, MinIO, OpenShift Data Foundation, and Swift for the LokiStack object storage.
 
-If you are using a different object store you might need to define the secret differently.
-See https://github.com/grafana/loki/blob/main/operator/docs/lokistack/object_storage.md
+This is an example for AWS S3 object store.
 
 ```sh
-$ kubectl create secret generic lokistack-minio -n openshift-logging\
-          --from-literal=bucketnames="openshift-logging" \
-          --from-literal=endpoint="http://minio.minio.svc:9000" \
-          --from-literal=access_key_id="loki-user" \
-          --from-literal=access_key_secret="$LOKI_USER_SECRET"
-secret/lokistack-minio created
+$ oc create secret generic logging-loki-s3 \
+  --from-literal=bucketnames="<bucket_name>" \
+  --from-literal=endpoint="<aws_bucket_endpoint>" \
+  --from-literal=access_key_id="<aws_access_key_id>" \
+  --from-literal=access_key_secret="<aws_access_key_secret>" \
+  --from-literal=region="<aws_region_of_your_bucket>" \
+  -n openshift-logging
 ```
 
-The endpoint consists= <svc>.<project>.svc:9000.
+If you are using a different object store you might need to define the secret differently.
+See https://github.com/grafana/loki/blob/main/operator/docs/lokistack/object_storage.md
 
 Loki supports different preconfigured sizes.
 
@@ -249,7 +89,9 @@ See https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/h
 
 In the operators/loki/lokistack.yaml the spec.size is defined as `1x.demo`. 
 
-To save space the Lokistack retention period is set to 3 days. The maximum supported retention period is 30 days.
+The maximum supported retention period for Loki is 30 days.
+
+To save space the Lokistack retention period is set to 3 days. 
 
 ```sh
 $ oc project openshift-logging
@@ -278,7 +120,7 @@ spec:
       - effectiveDate: '2024-10-11'
         version: v13
     secret:
-      name: lokistack-minio
+      name: lokistack-loki-s3
       type: s3
   hashRing:
     type: memberlist

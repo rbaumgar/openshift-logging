@@ -18,7 +18,7 @@ spec:
       - effectiveDate: '2024-10-11'
         version: v13
     secret:
-      name: lokistack-minio
+      name: lokistack-loki-s3
       type: s3
   hashRing:
     type: memberlist
