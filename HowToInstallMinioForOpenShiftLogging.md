@@ -13,7 +13,8 @@ OpenShift Logging and Loki requires an object store. If you don't have already a
 Create a new project (for example minio) :
 
 ```shell
-$ oc new-project minio
+$ MINIO_NAMESPACE=minio
+$ oc new-project $MINIO_NAMESPACE
 ```
 
 ## Create the MinIO Objects
@@ -30,8 +31,8 @@ metadata:
   annotations: {}
   name: minio-access-secrets
 stringData:
-  minioSecret: $MINIO_ADMIN_PWD
-  minioAccessKey: minio
+  minioPassword: $MINIO_ADMIN_PWD
+  minioUser: minio
   minioConsoleAddress: ":44645"
 EOF
 secret/minio-access-secrets created
@@ -50,7 +51,7 @@ $ oc apply -f minio/route-minio.yaml
 route.route.openshift.io/minio-console created
 route.route.openshift.io/minio-server created
 
-$ oc get pod -n minio
+$ oc get pod
 NAME                           READY   STATUS    RESTARTS   AGE
 minio-server-cf8c6c9c4-cvwwv   1/1     Running   0          3d2h
 
@@ -71,25 +72,42 @@ Docs: https://docs.min.io
 ## Create a bucket and user for the Lokistack
 
 ```shell
+BUCKET=<bucket_name> e.g. openshift-logging 
 # create loki user secret
-LOKI_USER_SECRET=`openssl rand -base64 12`
+BUCKET_SECRET=`openssl rand -base64 12`
 
 # create an alias for the connection
 $ oc rsh deployments/minio-server \
          mc alias set myminio http://localhost:9000 minio $MINIO_ADMIN_PWD
 Added `myminio` successfully.
 
+# create an access-policy file
+$ cat >bucket-access-policy.json <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+             "Action": ["s3:*"],
+             "Effect": "Allow",
+             "Resource": ["arn:aws:s3:::${BUCKET}",
+                          "arn:aws:s3:::${BUCKET}/*"]
+        }
+    ]
+}
+EOF
+
 # copy policy file to pod
-$ cat minio/openshift-logging-access-policy.json | \
-  oc exec deployments/minio-server -i -- sh -c "cat /dev/stdin > /tmp/openshift-logging-access-policy.json"
+$ cat bucket-access-policy.json | \
+  oc exec deployments/minio-server -i -- sh -c "cat /dev/stdin > /tmp/bucket-access-policy.json"
 
 # create new policy
 $ oc rsh deployments/minio-server \
-         mc admin policy create myminio openshift-logging-access-policy /tmp/openshift-logging-access-policy.json
+         mc admin policy create myminio $BUCKET-access-policy /tmp/bucket-access-policy.json
 Created policy `openshift-logging-access-policy` successfully.
 
 # cleanup: remove policy file
-$ oc rsh deployments/minio-server rm /tmp/openshift-logging-access-policy.json
+$ oc rsh deployments/minio-server rm /tmp/bucket-access-policy.json
+$ rm bucket-access-policy.json
 
 # (optional) create list all policies
 $ oc rsh deployments/minio-server \
@@ -103,7 +121,7 @@ openshift-logging-access-policy
 
 # create openshift-logging bucket
 $ oc rsh deployments/minio-server \
-         mc mb myminio/openshift-logging
+         mc mb myminio/$BUCKET
 Bucket created successfully `myminio/openshift-logging`.
 
 # (optional) list all buckets
@@ -113,7 +131,7 @@ $ oc rsh deployments/minio-server \
 
 # create user
 $ oc rsh deployments/minio-server \
-         mc admin user add myminio loki-user $LOKI_USER_SECRET
+         mc admin user add myminio $BUCKET $BUCKET_SECRET
 Added user `loki-user` successfully.
 
 # (optional) list all users
@@ -123,7 +141,7 @@ enabled    loki-user
 
 # attach openshift-logging-acccess-policy to user openshift-logging
 $ oc rsh deployments/minio-server \
-         mc admin policy attach myminio openshift-logging-access-policy --user loki-user
+         mc admin policy attach myminio $BUCKET-access-policy --user $BUCKET
 Attached Policies: [openshift-logging-access-policy]
 To User: openshift-logging
 
@@ -173,9 +191,9 @@ Loki requires a secret to define how to access the MinIO object store.
 ```sh
 $ kubectl create secret generic lokistack-loki-s3 -n openshift-logging\
           --from-literal=bucketnames="openshift-logging" \
-          --from-literal=endpoint="http://minio.minio.svc:9000" \
-          --from-literal=access_key_id="loki-user" \
-          --from-literal=access_key_secret="$LOKI_USER_SECRET"
+          --from-literal=endpoint="http://minio.$MINIO_NAMESPACE.svc:9000" \
+          --from-literal=access_key_id="$BUCKET" \
+          --from-literal=access_key_secret="$BUCKET_SECRET"
 secret/lokistack-loki-s3 created
 ```
 
@@ -188,7 +206,7 @@ Loki supports different preconfigured sizes.
 If you no longer requires Minio
 
 ```sh
-$ oc delete minio 
+$ oc delete ns $MINIO_NAMESPACE 
 ```
 
 This document: 

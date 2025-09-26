@@ -16,22 +16,23 @@ spec:
       containers:
         - name: minio
           env:
-            - name: MINIO_ACCESS_KEY
+            - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
                   name: minio-access-secrets
-                  key: minioAccessKey
-            - name: MINIO_SECRET_KEY
+                  key: minioUser
+            - name: MINIO_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: minio-access-secrets
-                  key: minioSecret
+                  key: minioPassword
             - name: MINIO_CONSOLE_ADDRESS
               valueFrom:
                 secretKeyRef:
                   name: minio-access-secrets
                   key: minioConsoleAddress
-          image: minio/minio
+          # Changed in version RELEASE.2025-05-24T17-08-30Z: The Console now presents only object browser capabilities similar to those available through the mc tool. For administrative interactions, such as user management, use the mc admin command.        
+          image: minio/minio:RELEASE.2025-03-12T18-04-18Z
           args:
             - server
             - /data

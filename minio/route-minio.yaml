@@ -4,7 +4,6 @@ metadata:
   labels:
     app.kubernetes.io/name: minio
   name: minio-console
-  namespace: minio
 spec:
   port:
     targetPort: 44645
@@ -22,7 +21,6 @@ metadata:
   labels:
     app.kubernetes.io/name: minio
   name: minio-server
-  namespace: minio
 spec:
   port:
     targetPort: 9000
