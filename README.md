@@ -49,6 +49,10 @@ This document was prepared and tested on OpenShift 4.17. To follow the instructi
 
 See also [Configuring and using logging in OpenShift Container Platform](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/logging/index) for the official documentation.
 
+You can find an [Installation Guide for Minio](HowToInstallMinioForOpenShiftLogging.md).
+
+You can find an [Installation Guide for Garage](HowToInstallGarageForOpenShiftLogging.md).
+
 ## Install Operators: OpenShift Logging, Loki, Observability Operator
 
 First, install the required operators:
