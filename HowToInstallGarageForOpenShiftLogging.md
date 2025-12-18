@@ -28,7 +28,7 @@ $ oc new-project $GARAGE_NAMESPACE
 Download the Git repo and install with Helm.
 
 ```shell
-$ git clone https://git.deuxfleurs.fr/Deuxfleurs/garage -m main-v2
+$ git clone https://git.deuxfleurs.fr/Deuxfleurs/garage -b main-v2
 $ cd garage/scripts/helm
 $ helm install --create-namespace --namespace $GARAGE_NAMESPACE garage ./garage
 ```
@@ -61,7 +61,7 @@ IP_1=10.130.0.151
 IP_0=10.131.1.96
 ```
 
-## Connect Nodes 1-2 to 0
+## Connect the Nodes 1-2 to 0
 
 Connect the three nodes together and check the status.
 
