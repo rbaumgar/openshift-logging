@@ -1,22 +1,23 @@
 # How to Install Garage as S3 Storage Provider for OpenShift Logging
 
-*By Robert Baumgartner, Red Hat Austria, Janurary 2026 (OpenShift 4.20, OpenShift Logging 6.1)*
+*By Robert Baumgartner, Red Hat Austria, January 2026 (OpenShift 4.20, OpenShift Logging 6.4)*
 
 In this blog, I will guide you on
 
 - How to Install Garage as S3 Storage Provider for OpenShift Logging
 
-OpenShift Logging and Loki requires an S3 object store. If you don't have already an object store provider use Garage.
+OpenShift Logging and Loki require an S3 object store. If you don't already have an object store provider, use Garage.
+Tempo Operator requires an S3 object store. You can use this blog as well.
 
-Garage is a lightweight geo-distributed data store that implements the `Amazon S3` object storage protocol. 
-It enables applications to store large blobs such as pictures, video, images, documents, etc., in a redundant multi-node setting. 
+`Garage` is a lightweight geo-distributed data store that implements the `Amazon S3` object storage protocol. 
+It enables applications to store large blobs such as pictures, videos, images, documents, etc., in a redundant multi-node setting. 
 S3 is versatile enough to also be used to publish a static website.
 
 [Garage: Deploying on Kubernetes Cookbook](https://garagehq.deuxfleurs.fr/documentation/cookbook/kubernetes/)
 
 ## Create a New Garage Project
 
-Create a new project (for example garage) :
+Create a new project (for example, garage):
 
 ```shell
 $ GARAGE_NAMEPSPACE=minio
@@ -43,7 +44,7 @@ $ kubectl patch statefulsets garage --type='json' -p='[{"op": "remove", "path": 
 
 ## Set fsGroupChangePolicy
 
-When many objects are available on the buckets the pod startup can be delayed.
+When many objects are available on the buckets, the pod startup can be delayed.
 
 Warning: `Setting volume ownership for 172b102d-21c8-46be-baf4-6720c4bc87cd/volumes/kubernetes.io~csi/pvc-057db6a4-ffe9-4352-9157-fb2641a9e1ff/mount is taking longer than expected, consider using OnRootMismatch`
 
@@ -56,7 +57,7 @@ statefulset.apps/garage patched
 
 ## Store IDs and IPs
 
-When the pods are ready store the IP adresses and the IDs.
+When the pods are ready, store the IP addresses and the IDs.
 
 ```shell
 for i in {0..2}; do 
@@ -110,7 +111,7 @@ meta-garage-1   Bound    pvc-f77f4f85-bf6e-4828-9f27-2a6e17000105   100Mi      R
 meta-garage-2   Bound    pvc-20703d54-480f-4e34-8685-4e31069ea4aa   100Mi      RWO            nfs-csi-storage   <unset>                 41h
 ```
 
-Apply the layout as verion 1 and check again the status.
+Apply the layout as version 1 and check the status again.
 
 ```shell
 $ kubectl exec garage-0 -- /garage layout apply --version 1
@@ -152,9 +153,9 @@ Defaulted container "garage" out of: garage, garage-init (init)
 List of keys:
   GKae6c7b941e98bbf4b6733d5b  logging
 
-## Create a bucket a for the Lokistack
+## Create a Bucket for the Lokistack
 
-Set BucketName, create it and allow access (read and write).
+Set BucketName, create it, and allow access (read and write).
 
 $ BucketName=openshift-logging
 $ kubectl exec garage-0 -- /garage bucket create ${BucketName}
@@ -181,7 +182,7 @@ List of buckets:
 Loki requires a secret to define how to access the S3 object store.
 
 ```shell
-$ cat <<EOF |oc apply -f -
+$ cat <<EOF | oc apply -f -
 apiVersion: v1
 kind: Secret
 metadata:
@@ -198,7 +199,7 @@ EOF
 secret/garage-test created
 ```
 
-or by kubectl command.
+Or by kubectl command.
 
 ```shell
 $ kubectl create secret generic lokistack-loki-s3 -n openshift-logging \
@@ -213,13 +214,13 @@ secret/lokistack-loki-s3 created
 
 ## How to Connect the AWS CLI with Garage
 
-Make a port forward to get access to the API, in a seperate window.
+Make a port forward to get access to the API, in a separate window.
 
 ```shell
 $ oc port-forward -n garage garage-0 3900:3900
 ```
 
-Set the envirnment and use the AWS CLI.
+Set the environment and use the AWS CLI.
 
 ```shell
 export AWS_ACCESS_KEY_ID=${KeyID}
@@ -235,7 +236,7 @@ aws s3 rm s3://openshift-logging/infrastructure --recursive
 aws s3api list-buckets
 ```
 
-### If You Want to Setup the Lifecycle for a Bucket
+### If You Want to Set Up the Lifecycle for a Bucket
 
 See KB solution https://access.redhat.com/solutions/7053212
 
@@ -245,7 +246,7 @@ cat > logging-bucket-lifecycle.json <<EOF
   "Rules": [
     {
       "Expiration": {
-        "Days": 1  
+        "Days": 4  
       },
       "ID": "LifeCycle4Days",  
       "Filter": {},
@@ -263,6 +264,40 @@ aws s3api get-bucket-lifecycle-configuration --bucket openshift-logging
 
 // remove the lifecycle json
 rm logging-bucket-lifecycle.json
+```
+
+## Create Key, bucket and secret for Tempo
+
+If you need a key and a bucket for Tempo use the following steps, similar to the steps for OpenShift Logging.
+
+```shell
+$ KeyName=tempo
+$ response=`kubectl exec garage-0 -- /garage key create ${KeyName}`
+
+// for Version 2.1.0
+$ KeyID=`echo $response | awk '{print $8}'`
+$ KeySecret=`echo $response | awk '{print $14}'`
+
+$ BucketName=tempo-demo
+$ kubectl exec garage-0 -- /garage bucket create ${BucketName}
+
+$ kubectl exec garage-0 -- /garage bucket allow ${BucketName} --read --write --key ${KeyName}
+
+$ Tempo_Namespace
+$ cat <<EOF | oc apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: garage-test
+  namespace: ${Tempo_Namespace}
+stringData:
+  endpoint: http://garage.garage.svc:3900
+  bucket: ${BucketName}
+  access_key_id: ${KeyID}
+  access_key_secret: ${KeySecret}
+type: Opaque
+EOF
+secret/garage-test created
 ```
 
 ## Upgrade Garage Version
@@ -285,7 +320,7 @@ $ kubectl scale statefulsets garage --replicas=3
 
 If you no longer requires Garage, delete the Hlm chart and the PVCs.
 
-```sh
+```shell
 $ helm delete garage
 $ oc delete pvc  data-garage-0 data-garage-1 data-garage-2 meta-garage-0 meta-garage-1 meta-garage-2
 $ oc delete ns $GARAGE_NAMESPACE 
