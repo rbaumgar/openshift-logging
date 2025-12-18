@@ -41,6 +41,19 @@ Remove the provided `securityContext` provided by the Helm chart.
 $ kubectl patch statefulsets garage --type='json' -p='[{"op": "remove", "path": "/spec/template/spec/securityContext"}]'
 ```
 
+## Set fsGroupChangePolicy
+
+When many objects are available on the buckets the pod startup can be delayed.
+
+Warning: `Setting volume ownership for 172b102d-21c8-46be-baf4-6720c4bc87cd/volumes/kubernetes.io~csi/pvc-057db6a4-ffe9-4352-9157-fb2641a9e1ff/mount is taking longer than expected, consider using OnRootMismatch`
+
+See (https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#configure-volume-permission-and-ownership-change-policy-for-pods)
+
+```shell
+$ kubectl patch statefulsets garage --type='json' -p='[{"op": "add", "path": "/spec/template/spec/securityContext", "value": {"fsGroupChangePolicy": "OnRootMismatch"} }]'
+statefulset.apps/garage patched
+```
+
 ## Store IDs and IPs
 
 When the pods are ready store the IP adresses and the IDs.
@@ -223,6 +236,8 @@ aws s3api list-buckets
 ```
 
 ### If You Want to Setup the Lifecycle for a Bucket
+
+See KB solution https://access.redhat.com/solutions/7053212
 
 ```shell
 cat > logging-bucket-lifecycle.json <<EOF
