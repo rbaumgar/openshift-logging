@@ -270,7 +270,7 @@ You can see that six collectors are running because one is on each node: 3 contr
 The Cluster Observability Operator is required for the UI in the OpenShift console to display the log content.
 
 ```shell
-$ oc apply -f operators/coo/uiplugin-logging.yaml
+$  
 uiplugin.observability.openshift.io/logging created
 ```
 

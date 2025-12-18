@@ -28,7 +28,7 @@ $ oc new-project $GARAGE_NAMESPACE
 Download the Git repo and install with Helm.
 
 ```shell
-$ git clone https://git.deuxfleurs.fr/Deuxfleurs/garage
+$ git clone https://git.deuxfleurs.fr/Deuxfleurs/garage -m main-v2
 $ cd garage/scripts/helm
 $ helm install --create-namespace --namespace $GARAGE_NAMESPACE garage ./garage
 ```
@@ -43,18 +43,19 @@ $ kubectl patch statefulsets garage --type='json' -p='[{"op": "remove", "path": 
 
 ## Store IDs and IPs
 
-When the pods are redy store the IP adresses and the IDs.
+When the pods are ready store the IP adresses and the IDs.
 
 ```shell
 for i in {0..2}; do 
     export IP_$i=`kubectl get pod garage-$i -o jsonpath='{.status.podIP}'`;
     export ID_$i=`kubectl exec garage-$i -- /garage node id 2>/dev/null`
 done
-$ env|grep ID_
+
+$ env | grep ID_
 ID_2=9af310d6cae6d78807d7884471604a9b828f14b2b7195b5c159839fae9022ba3
 ID_1=cbc7fbfdd7a234da887fd99f3dfa9788ba816fa9b69216effe68811237b411c0
 ID_0=a3802ce46bd50e6aaa7f3c573c16ab914f92451097690b32db93ce88c8e1fdef
-$ env|grep IP_
+$ env | grep IP_
 IP_2=10.128.4.123
 IP_1=10.130.0.151
 IP_0=10.131.1.96
@@ -86,7 +87,7 @@ for i in {0..2}; do
     kubectl exec garage-$i -- /garage layout assign -z dc1 -c ${SIZE} ${!id}
 done
 
-$ kubectl get pvc
+$ kubectl get pvc -l app.kubernetes.io/name=garage
 NAME            STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS      VOLUMEATTRIBUTESCLASS   AGE
 data-garage-0   Bound    pvc-7c4980c9-2337-4720-a01a-728dd63fe7f3   5Gi        RWO            nfs-csi-storage   <unset>                 41h
 data-garage-1   Bound    pvc-bcd09406-e6a3-4f8e-b660-8ce87e8bcf4b   5Gi        RWO            nfs-csi-storage   <unset>                 41h
@@ -123,14 +124,13 @@ Defaulted container "garage" out of: garage, garage-init (init)
 2025-12-09T11:35:42.975201Z  INFO garage_net::netapp: Connected to 127.0.0.1:3901, negotiating handshake...    
 2025-12-09T11:35:43.017081Z  INFO garage_net::netapp: Connection established to 517afc37a110c7cd    
 
-// for Version 1.3.0
-$ KeyID=`echo $response | awk '{print $6}'`
-$ KeySecret=`echo $response | awk '{print $9}'`
-
 // for Version 2.1.0
 $ KeyID=`echo $response | awk '{print $8}'`
 $ KeySecret=`echo $response | awk '{print $14}'`
 
+// for Version 1.3.0
+$ KeyID=`echo $response | awk '{print $6}'`
+$ KeySecret=`echo $response | awk '{print $9}'`
 
 $ kubectl exec garage-0 -- /garage key list
 Defaulted container "garage" out of: garage, garage-init (init)
@@ -176,9 +176,10 @@ metadata:
   namespace: openshift-logging
 stringData:
   endpoint: http://garage.garage.svc:3900
-  bucket: ${BucketName}
+  bucketnames: ${BucketName}
   access_key_id: ${KeyID}
   access_key_secret: ${KeySecret}
+  region: garage
 type: Opaque
 EOF
 secret/garage-test created
@@ -191,8 +192,78 @@ $ kubectl create secret generic lokistack-loki-s3 -n openshift-logging \
           --from-literal=bucketnames="${BucketName}" \
           --from-literal=endpoint="http://garage.garage.svc:3900" \
           --from-literal=access_key_id="${KeyID}" \
-          --from-literal=access_key_secret="${KeySecret}"
+          --from-literal=access_key_secret="${KeySecret}" \
+          --from-literal=region=garage
+
 secret/lokistack-loki-s3 created
+```
+
+## How to Connect the AWS CLI with Garage
+
+Make a port forward to get access to the API, in a seperate window.
+
+```shell
+$ oc port-forward -n garage garage-0 3900:3900
+```
+
+Set the envirnment and use the AWS CLI.
+
+```shell
+export AWS_ACCESS_KEY_ID=${KeyID}
+export AWS_SECRET_ACCESS_KEY=${KeySecret}
+export AWS_DEFAULT_REGION='garage'
+export AWS_ENDPOINT_URL=http://localhost:3900
+
+// some example commands
+aws s3 ls
+aws s3 ls s3://openshift-logging --recursive
+aws s3 rm s3://openshift-logging/infrastructure --recursive
+
+aws s3api list-buckets
+```
+
+### If You Want to Setup the Lifecycle for a Bucket
+
+```shell
+cat > logging-bucket-lifecycle.json <<EOF
+{
+  "Rules": [
+    {
+      "Expiration": {
+        "Days": 1  
+      },
+      "ID": "LifeCycle4Days",  
+      "Filter": {},
+      "Status": "Enabled"
+    }
+  ]
+}
+EOF
+
+// st the lifecycle-configuration
+aws s3api put-bucket-lifecycle-configuration --bucket openshift-logging --lifecycle-configuration file://logging-bucket-lifecycle.json
+
+// check the lifecycle-configuration
+aws s3api get-bucket-lifecycle-configuration --bucket openshift-logging
+
+// remove the lifecycle json
+rm logging-bucket-lifecycle.json
+```
+
+## Upgrade Garage Version
+
+If you have not installed `main-v2` you can upgrade with the following steps.
+
+```shell
+$ kubectl scale statefulsets garage --replicas=0
+statefulset.apps/garage scaled
+
+$ kubectl set image statefulsets/garage garage=dxflrs/amd64_garage:v2.1.0
+
+//change replication_mode = "3" -> replication_factor = 3
+$ kubectl edit cm garage-config
+
+$ kubectl scale statefulsets garage --replicas=3
 ```
 
 ## Uninstall Garage
