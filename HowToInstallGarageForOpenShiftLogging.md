@@ -1,23 +1,22 @@
 # How to Install Garage as S3 Storage Provider for OpenShift Logging
 
-*By Robert Baumgartner, Red Hat Austria, January 2026 (OpenShift 4.20, OpenShift Logging 6.4)*
+*By Robert Baumgartner, Red Hat Austria, December 2025 (OpenShift 4.20, OpenShift Logging 6.4)*
 
 In this blog, I will guide you on
 
-- How to Install Garage as S3 Storage Provider for OpenShift Logging
-
-OpenShift Logging and Loki require an S3 object store. If you don't already have an object store provider, use Garage.
-Tempo Operator requires an S3 object store. You can use this blog as well.
+- How to Install Garage as S3 Storage Provider
 
 `Garage` is a lightweight geo-distributed data store that implements the `Amazon S3` object storage protocol. 
 It enables applications to store large blobs such as pictures, videos, images, documents, etc., in a redundant multi-node setting. 
 S3 is versatile enough to also be used to publish a static website.
 
+OpenShift Logging, Loki, Quay and Tempo require an S3 object store. If you don't already have an object store provider, use Garage.
+
 [Garage: Deploying on Kubernetes Cookbook](https://garagehq.deuxfleurs.fr/documentation/cookbook/kubernetes/)
 
 ## Create a New Garage Project
 
-Create a new project (for example, garage):
+First, create a dedicated namespace for Garage to keep your resources organized.
 
 ```shell
 $ GARAGE_NAMEPSPACE=minio
@@ -26,7 +25,7 @@ $ oc new-project $GARAGE_NAMESPACE
 
 ## Install Garage
 
-Download the Git repo and install with Helm.
+Download the official repository and deploy the Helm chart.
 
 ```shell
 $ git clone https://git.deuxfleurs.fr/Deuxfleurs/garage -b main-v2
@@ -34,17 +33,17 @@ $ cd garage/scripts/helm
 $ helm install --create-namespace --namespace $GARAGE_NAMESPACE garage ./garage
 ```
 
-## (for OpenShift) Remove securityContext
+## Configure Security for OpenShift
 
-Remove the provided `securityContext` provided by the Helm chart.
+To ensure Garage runs smoothly on OpenShift's security architecture, you need to adjust the `securityContext`.
 
+* **Remove the default context:**
 ```shell
 $ kubectl patch statefulsets garage --type='json' -p='[{"op": "remove", "path": "/spec/template/spec/securityContext"}]'
 ```
 
-## Set fsGroupChangePolicy
 
-When many objects are available on the buckets, the pod startup can be delayed.
+* **Optimize volume permissions:** This prevents startup delays when handling large numbers of objects.
 
 Warning: `Setting volume ownership for 172b102d-21c8-46be-baf4-6720c4bc87cd/volumes/kubernetes.io~csi/pvc-057db6a4-ffe9-4352-9157-fb2641a9e1ff/mount is taking longer than expected, consider using OnRootMismatch`
 
@@ -55,29 +54,24 @@ $ kubectl patch statefulsets garage --type='json' -p='[{"op": "add", "path": "/s
 statefulset.apps/garage patched
 ```
 
-## Store IDs and IPs
+## Cluster Initialization
 
-When the pods are ready, store the IP addresses and the IDs.
+Once the pods are ready, you must link the nodes together to form a cluster.
+
+### Capture Node Information
+
+Run this script to grab the IP addresses and unique IDs of your Garage nodes:
 
 ```shell
 for i in {0..2}; do 
     export IP_$i=`kubectl get pod garage-$i -o jsonpath='{.status.podIP}'`;
     export ID_$i=`kubectl exec garage-$i -- /garage node id 2>/dev/null`
 done
-
-$ env | grep ID_
-ID_2=9af310d6cae6d78807d7884471604a9b828f14b2b7195b5c159839fae9022ba3
-ID_1=cbc7fbfdd7a234da887fd99f3dfa9788ba816fa9b69216effe68811237b411c0
-ID_0=a3802ce46bd50e6aaa7f3c573c16ab914f92451097690b32db93ce88c8e1fdef
-$ env | grep IP_
-IP_2=10.128.4.123
-IP_1=10.130.0.151
-IP_0=10.131.1.96
 ```
 
-## Connect the Nodes 1-2 to 0
+### Connect the Nodes
 
-Connect the three nodes together and check the status.
+Tell the nodes to communicate with each other:
 
 ```shell
 for i in {1..2}; do 
@@ -89,15 +83,17 @@ done
 $ kubectl exec garage-0 -- /garage status
 ```
 
-## Resize Storage PVCs and Assign It
+## Storage Layout & Capacity
 
-Resize the PVCs to the required size and assign it to a zone called `dc1`.
+Define how much storage each node should contribute to the cluster (e.g., 5Gi).
 
 ```shell
 SIZE=5Gi
 for i in {0..2}; do
     id=ID_${i}
+    # Resize the PVC
     kubectl patch pvc data-garage-$i -p '{"spec":{"resources":{"requests":{"storage":"'${SIZE}'"}}}}'
+    # Assign to the 'dc1' zone
     kubectl exec garage-$i -- /garage layout assign -z dc1 -c ${SIZE} ${!id}
 done
 
@@ -114,8 +110,10 @@ meta-garage-2   Bound    pvc-20703d54-480f-4e34-8685-4e31069ea4aa   100Mi      R
 Apply the layout as version 1 and check the status again.
 
 ```shell
+# Finalize the layout
 $ kubectl exec garage-0 -- /garage layout apply --version 1
 
+# Check the status
 $ kubectl exec garage-0 -- /garage status
 Defaulted container "garage" out of: garage, garage-init (init)
 2025-12-09T10:42:31.645340Z  INFO garage_net::netapp: Connected to 127.0.0.1:3901, negotiating handshake...    
@@ -127,67 +125,40 @@ ID                Hostname  Address            Tags  Zone  Capacity   DataAvail
 517afc37a110c7cd  garage-0  10.131.1.149:3901  []    dc1   1000.0 MB  37.6 GB (4.7%)
 ```
 
-## Create a Key for the Lokistack
+## Create Storage for Loki
 
-Create a `Key` and extract the `ID` and the `Secret` depending on the Garage version.
+Loki requires a Bucket, an Access Key, and a Secret to store logs.
+
+### Create Key and Bucket
 
 ```shell
 $ KeyName=logging
-$ response=`kubectl exec garage-0 -- /garage key create ${KeyName}`
-Defaulted container "garage" out of: garage, garage-init (init)
-2025-12-09T11:35:42.975201Z  INFO garage_net::netapp: Connected to 127.0.0.1:3901, negotiating handshake...    
-2025-12-09T11:35:43.017081Z  INFO garage_net::netapp: Connection established to 517afc37a110c7cd    
-
-// for Version 2.1.0
-$ KeyID=`echo $response | awk '{print $8}'`
-$ KeySecret=`echo $response | awk '{print $14}'`
-
-// for Version 1.3.0
-$ KeyID=`echo $response | awk '{print $6}'`
-$ KeySecret=`echo $response | awk '{print $9}'`
-
-$ kubectl exec garage-0 -- /garage key list
-Defaulted container "garage" out of: garage, garage-init (init)
-2025-12-09T11:36:18.580684Z  INFO garage_net::netapp: Connected to 127.0.0.1:3901, negotiating handshake...    
-2025-12-09T11:36:18.625244Z  INFO garage_net::netapp: Connection established to 517afc37a110c7cd    
-List of keys:
-  GKae6c7b941e98bbf4b6733d5b  logging
-
-## Create a Bucket for the Lokistack
-
-Set BucketName, create it, and allow access (read and write).
-
 $ BucketName=openshift-logging
+
+# Create Key
+$ response=$(kubectl exec garage-0 -- /garage key create ${KeyName})
+
+# Extract IDs (for Version 2.1.0)
+$ KeyID=$(echo $response | awk '{print $8}')
+$ KeySecret=$(echo $response | awk '{print $14}')
+
+# Create Bucket and Assign Permissions
 $ kubectl exec garage-0 -- /garage bucket create ${BucketName}
-Defaulted container "garage" out of: garage, garage-init (init)
-2025-12-09T11:32:47.669354Z  INFO garage_net::netapp: Connected to 127.0.0.1:3901, negotiating handshake...    
-2025-12-09T11:32:47.714092Z  INFO garage_net::netapp: Connection established to 517afc37a110c7cd    
-Bucket openshift-logging was created.
-
 $ kubectl exec garage-0 -- /garage bucket allow ${BucketName} --read --write --key ${KeyName}
-Defaulted container "garage" out of: garage, garage-init (init)
-2025-12-09T11:56:55.101382Z  INFO garage_net::netapp: Connected to 127.0.0.1:3901, negotiating handshake...    
-2025-12-09T11:56:55.144112Z  INFO garage_net::netapp: Connection established to 517afc37a110c7cd    
-New permissions for GKae6c7b941e98bbf4b6733d5b on openshift-logging: read true, write true, owner false.
+```
 
-$ kubectl exec garage-0 -- /garage bucket list
-Defaulted container "garage" out of: garage, garage-init (init)
-2025-12-09T11:33:21.445333Z  INFO garage_net::netapp: Connected to 127.0.0.1:3901, negotiating handshake...    
-2025-12-09T11:33:21.487056Z  INFO garage_net::netapp: Connection established to 517afc37a110c7cd    
-List of buckets:
-  openshift-logging    da34200476c4b0f117aae612bfaedd35f458d4b043299835fc95580d77151cd9
+### Create the OpenShift Secret
 
-## Create a Secret for Loki 
-
-Loki requires a secret to define how to access the S3 object store.
+Apply this secret so Loki can authenticate with Garage:
 
 ```shell
+$ Loki_Namespace=openshift-logging
 $ cat <<EOF | oc apply -f -
 apiVersion: v1
 kind: Secret
 metadata:
   name: lokistack-loki-s3
-  namespace: openshift-logging
+  namespace: ${Loki_Namespace}$
 stringData:
   endpoint: http://garage.garage.svc:3900
   bucketnames: ${BucketName}
@@ -196,10 +167,9 @@ stringData:
   region: garage
 type: Opaque
 EOF
-secret/garage-test created
 ```
 
-Or by kubectl command.
+Or by using `kubectl` command.
 
 ```shell
 $ kubectl create secret generic lokistack-loki-s3 -n openshift-logging \
@@ -208,8 +178,41 @@ $ kubectl create secret generic lokistack-loki-s3 -n openshift-logging \
           --from-literal=access_key_id="${KeyID}" \
           --from-literal=access_key_secret="${KeySecret}" \
           --from-literal=region=garage
+```
 
-secret/lokistack-loki-s3 created
+## Create Storage for Tempo
+
+Tempo requires a Bucket, an Access Key, and a Secret to store logs.
+
+```shell
+$ KeyName=tempo
+$ BucketName=tempo-demo
+$ Tempo_Namespace=tempo-demo
+
+# Create Key
+$ response=$(kubectl exec garage-0 -- /garage key create ${KeyName})
+
+# Extract IDs (for Version 2.1.0)
+$ KeyID=$(echo $response | awk '{print $8}')
+$ KeySecret=$(echo $response | awk '{print $14}')
+
+# Create Bucket and Assign Permissions
+$ kubectl exec garage-0 -- /garage bucket create ${BucketName}
+$ kubectl exec garage-0 -- /garage bucket allow ${BucketName} --read --write --key ${KeyName}
+
+$ cat <<EOF | oc apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: garage-test
+  namespace: ${Tempo_Namespace}
+stringData:
+  endpoint: http://garage.garage.svc:3900
+  bucket: ${BucketName}
+  access_key_id: ${KeyID}
+  access_key_secret: ${KeySecret}
+type: Opaque
+EOF
 ```
 
 ## How to Connect the AWS CLI with Garage
@@ -266,40 +269,6 @@ aws s3api get-bucket-lifecycle-configuration --bucket openshift-logging
 rm logging-bucket-lifecycle.json
 ```
 
-## Create Key, bucket and secret for Tempo
-
-If you need a key and a bucket for Tempo use the following steps, similar to the steps for OpenShift Logging.
-
-```shell
-$ KeyName=tempo
-$ response=`kubectl exec garage-0 -- /garage key create ${KeyName}`
-
-// for Version 2.1.0
-$ KeyID=`echo $response | awk '{print $8}'`
-$ KeySecret=`echo $response | awk '{print $14}'`
-
-$ BucketName=tempo-demo
-$ kubectl exec garage-0 -- /garage bucket create ${BucketName}
-
-$ kubectl exec garage-0 -- /garage bucket allow ${BucketName} --read --write --key ${KeyName}
-
-$ Tempo_Namespace
-$ cat <<EOF | oc apply -f -
-apiVersion: v1
-kind: Secret
-metadata:
-  name: garage-test
-  namespace: ${Tempo_Namespace}
-stringData:
-  endpoint: http://garage.garage.svc:3900
-  bucket: ${BucketName}
-  access_key_id: ${KeyID}
-  access_key_secret: ${KeySecret}
-type: Opaque
-EOF
-secret/garage-test created
-```
-
 ## Upgrade Garage Version
 
 If you have not installed `main-v2` you can upgrade with the following steps.
@@ -321,8 +290,18 @@ $ kubectl scale statefulsets garage --replicas=3
 If you no longer requires Garage, delete the Hlm chart and the PVCs.
 
 ```shell
+// store the node IDs
+for i in {0..2}; do 
+    export ID_$i=`kubectl exec garage-$i -- /garage node id 2>/dev/null`
+done
+
 $ helm delete garage
 $ oc delete pvc  data-garage-0 data-garage-1 data-garage-2 meta-garage-0 meta-garage-1 meta-garage-2
+
+// delete garagenodes CRs
+$ kubectl delete garagenodes.deuxfleurs.fr ${ID_0} ${ID_1} ${ID_2}
+
+// delete namespace if needed
 $ oc delete ns $GARAGE_NAMESPACE 
 ```
 

@@ -482,7 +482,7 @@ clusterrolebinding.rbac.authorization.k8s.io "logging-grafana-auth-delegator" de
 ## Uninstall Logging Stack
 
 ```shell
-$ oc projct openshift-logging
+$ oc project openshift-logging
 
 # Observability Operator
 $ oc delete uiplugins.observability.openshift.io logging
