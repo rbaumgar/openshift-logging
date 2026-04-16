@@ -79,17 +79,17 @@ subscription.operators.coreos.com/cluster-observability-operator created
 Check that all operators are running and have reached the phase *Succeeded*. This may take a few minutes.
 
 ```shell
-$ oc get csv -n openshift-logging cluster-logging.v6.1.0
-NAME                      DISPLAY                     VERSION   REPLACES   PHASE
-cluster-logging.v6.1.0    Red Hat OpenShift Logging   6.1.0                Succeeded
+$ oc get csv -n openshift-logging cluster-logging.v6.4.3 
+NAME                     DISPLAY                     VERSION   REPLACES                 PHASE
+cluster-logging.v6.4.3   Red Hat OpenShift Logging   6.4.3     cluster-logging.v6.4.2   Succeeded
 
-$ oc get csv -n openshift-operators-redhat loki-operator.v6.1.0
-NAME                      DISPLAY                 VERSION   REPLACES   PHASE
-loki-operator.v6.1.0      Loki Operator           6.1.0                Succeeded
+$ oc get csv -n openshift-operators-redhat loki-operator.v6.4.3 
+NAME                   DISPLAY         VERSION   REPLACES               PHASE
+loki-operator.v6.4.3   Loki Operator   6.4.3     loki-operator.v6.4.2   Succeeded
 
-$ oc get csv -n openshift-operators cluster-observability-operator.0.4.1 
-NAME                                   DISPLAY                          VERSION   REPLACES                               PHASE
-cluster-observability-operator.0.4.1   Cluster Observability Operator   0.4.1     cluster-observability-operator.0.3.2   Succeeded
+$ oc get csv -n openshift-operators cluster-observability-operator.v1.4.0 
+NAME                                    DISPLAY                          VERSION   REPLACES                                PHASE
+cluster-observability-operator.v1.4.0   Cluster Observability Operator   1.4.0     cluster-observability-operator.v1.3.1   Succeeded
 ```
 
 ## Configure the LokiStack
@@ -248,6 +248,8 @@ observability.openshift.io/ValidOutput-default-lokistack-infrastructure     True
 
 # PipelineCondition
 $ oc get clusterlogforwarders.observability.openshift.io collector --template='{{printf "%-57s %7s %-30s\n" "Type" "Status" "Reason/Message"}}{{range .status.pipelineConditions}}{{printf "%-57s %7s %s/%s\n" .type .status .reason .message}}{{end}}'
+Type                                                       Status Reason/Message                
+observability.openshift.io/ValidPipeline-default-logstore    True ValidationSuccess/pipeline "default-logstore" is valid
 
 $ oc get daemonsets.apps collector
 NAME        DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
@@ -270,7 +272,7 @@ You can see that six collectors are running because one is on each node: 3 contr
 The Cluster Observability Operator is required for the UI in the OpenShift console to display the log content.
 
 ```shell
-$  
+$  oc apply -f operators/coo/uiplugin-logging.yaml
 uiplugin.observability.openshift.io/logging created
 ```
 

@@ -158,7 +158,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: lokistack-loki-s3
-  namespace: ${Loki_Namespace}$
+  namespace: ${Loki_Namespace}
 stringData:
   endpoint: http://garage.garage.svc:3900
   bucketnames: ${BucketName}
